@@ -1,3 +1,4 @@
+from re import A
 import numpy as np
 from sklearn.metrics import (
     recall_score,
@@ -59,10 +60,9 @@ class LogisticLassoFistaCV:
 
     def validate(self, X_valid: ArrayLike, y_valid: ArrayLike, measure: str, prob_threshold: float = 0.5):
         assert self.fitted, "Model is not fitted yet. Use 'fit' first."
-
         X_valid = np.hstack((np.ones((X_valid.shape[0], 1)), X_valid))
-        current_scores = []
 
+        currect_scores = []
         lambdas_sorted = sorted(self.lambdas)
 
         for reg in lambdas_sorted:
@@ -71,11 +71,10 @@ class LogisticLassoFistaCV:
             y_pred = (y_prob >= prob_threshold).astype(int)
 
             score = calculate_metric_value(y_valid, y_pred, y_prob, measure)
-            current_scores.append(score)
+            currect_scores.append(score)
 
-        self.all_validation_scores_.append(current_scores)
-
-        scores_matrix = np.array(self.all_validation_scores_)
+        self.all_validation_scores_.append(currect_scores)
+        scores_matrix = np.asarray(self.all_validation_scores_)
         k_splits = scores_matrix.shape[0]
 
         mean_scores = np.mean(scores_matrix, axis=0)
@@ -83,61 +82,64 @@ class LogisticLassoFistaCV:
 
         best_idx = np.argmax(mean_scores)
         best_score = mean_scores[best_idx]
+        best_idx_1_se = best_idx
 
         se = std_scores[best_idx] / np.sqrt(k_splits) if k_splits > 1 else 0
         threshold = best_score - se
 
-        best_idx_1se = best_idx
         for i in range(len(lambdas_sorted) - 1, -1, -1):
             if mean_scores[i] >= threshold:
-                best_idx_1se = i
+                best_idx_1_se = i
                 break
 
-        self.best_lambda_1se_ = lambdas_sorted[best_idx_1se]
+        self.best_lambda_1se_ = lambdas_sorted[best_idx_1_se]
         self.best_beta_1se_ = self.coefs_paths_[self.best_lambda_1se_]
 
         self.best_lambda_ = lambdas_sorted[best_idx]
         self.best_beta_ = self.coefs_paths_[self.best_lambda_]
 
-        return mean_scores[best_idx], mean_scores[best_idx_1se]
+        return mean_scores[best_idx], mean_scores[best_idx_1_se]
 
-    def predict_proba(self, X_test: ArrayLike):
+    def predict_proba(self, X_test: ArrayLike, _1se: bool = False):
         assert self.fitted, "Model is not fitted yet. Use 'fit' first."
         assert self.validated, "Model is not validated yet. Use 'validate' first"
         assert len(X_test.shape) == 2
         assert X_test.shape[1] == self.best_beta_.shape[0] - 1
 
-        X_test = np.hstack((np.ones((X_test.shape[0], 1)), X_test))
-        return sigmoid(X_test @ self.best_beta_)
+        beta = self.best_beta_1se_ if _1se else self.best_beta_
 
-    def predict(self, X_test: ArrayLike, prob_threshold: float = 0.5):
+        X_test = np.hstack((np.ones((X_test.shape[0], 1)), X_test))
+        return sigmoid(X_test @ beta)
+
+    def predict(self, X_test: ArrayLike, prob_threshold: float = 0.5, _1se: bool = False):
         assert self.fitted, "Model is not fitted yet. Use 'fit' first."
         assert self.validated, "Model is not validated yet. Use 'validate' first"
 
-        y_prob = sigmoid(X_test @ self.best_beta_)
+        beta = self.best_beta_1se_ if _1se else self.best_beta_
+
+        y_prob = sigmoid(X_test @ beta)
         y_pred = (y_prob >= prob_threshold).astype(int)
         return y_pred
 
-    def plot_coefficients(self) -> None:
+    def plot_coefficients(self, figsize: tuple[int, int] = (10, 6)) -> None:
         assert self.fitted, "Model is not fitted yet. Use 'fit' first."
 
-        lambdas = sorted(self.lambdas)
-        coefs = [self.coefs_paths_[l][1:] for l in lambdas]  # Without intercept
+        lambdas_sorted = sorted(self.lambdas)
+        coefs = [self.coefs_paths_[l][1:] for l in lambdas_sorted]
 
-        plt.figure(figsize=(10, 6))
-        plt.plot(lambdas, coefs, alpha=0.7)
+        plt.figure(figsize=figsize)
+        plt.plot(lambdas_sorted, coefs, alpha=0.8)
         plt.xscale("log")
         plt.xlabel(r"$\lambda$")
         plt.ylabel("Coefficients")
         plt.title("Lasso Regularization Path")
         plt.axis("tight")
-        plt.show()
 
     def plot(self, measure: str) -> None:
         assert self.all_validation_scores_, "Model is not validated yet. Use 'validate' first"
 
         lambdas = sorted(self.lambdas)
-        scores_matrix = np.array(self.all_validation_scores_)  # shape: (n_splits, k_lambdas)
+        scores_matrix = np.array(self.all_validation_scores_)  # shape: (k_splits, p_lambdas)
 
         mean_scores = np.mean(scores_matrix, axis=0)
         std_scores = np.std(scores_matrix, axis=0)
