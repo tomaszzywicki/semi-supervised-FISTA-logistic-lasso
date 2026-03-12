@@ -1,23 +1,40 @@
-from re import A
-import numpy as np
-from sklearn.metrics import (
-    recall_score,
-    precision_score,
-    f1_score,
-    balanced_accuracy_score,
-    roc_auc_score,
-    average_precision_score,
-)
-import matplotlib.pyplot as plt
+"""This file contains implementation of the LogisticLassoFistaCV class."""
 
-from numpy.typing import NDArray, ArrayLike
+import matplotlib.pyplot as plt
+import numpy as np
+from numpy.typing import ArrayLike
+
+from utils import *
 
 
 class LogisticLassoFistaCV:
+    """
+    A class for performing logistic regression with Lasso regularization
+    using the FISTA (Fast Iterative Shrinkage-Thresholding Algorithm) method.
+    """
 
-    def __init__(self, lambdas: ArrayLike = None):
+    def __init__(
+        self,
+        lambdas: ArrayLike = None,
+        max_iter: int = 100,
+        warm_start: bool = True,
+        report_interval: int = 10,
+        verbose: bool = False,
+    ) -> None:
+        """
+        Initialize the model with specified parameters.
+
+        Args:
+            lambdas (ArrayLike, optional): Regularization strengths to be used. Defaults to None.
+            max_iter (int, optional): Maximum number of iterations for the optimization algorithm. Defaults to 100.
+            warm_start (bool, optional): Whether to reuse the solution of the previous call to fit as initialization. Defaults to True.
+            report_interval (int, optional): Interval for reporting progress during fitting. Defaults to 10.
+            verbose (bool, optional): If True, prints detailed information during fitting. Defaults to False.
+        """
+
         self.lambdas = lambdas if lambdas is not None else np.logspace(-4, 1, 80)
 
+        # estimated parameters
         self.coefs_paths_ = {}  # {lambda : beta}
         self.all_validation_scores_ = []  # shape (n_validate_calls, n_lambdas)
         self.best_lambda_ = None
@@ -27,38 +44,78 @@ class LogisticLassoFistaCV:
         self.fitted = False
         self.validated = False
 
-    def fit(
-        self,
-        X_train: ArrayLike,
-        y_train: ArrayLike,
-        max_iter: int = 100,
-        warm_start: bool = True,
-        report_interval: int = 10,
-        verbose: bool = False,
-    ) -> None:
+        # training parameters
+        self.max_iter = max_iter
+        self.warm_start = warm_start
+        self.report_interval = report_interval
+        self.verbose = verbose
+
+    def fit(self, X_train: ArrayLike, y_train: ArrayLike) -> "LogisticLassoFistaCV":
+        """
+        Fit the model according to the given training data.
+
+        Args:
+            X_train (ArrayLike): Training matrix of size (n_samples, n_features).
+            y_train (ArrayLike): Target vector relative to X.
+
+        Returns:
+            LogisticLassoFistaCV: Fitted estimator.
+        """
         # TODO dodać żeby patrzyło czy zbiegło przed max_iter
         assert len(X_train.shape) == 2
 
-        X_train = np.hstack((np.ones((X_train.shape[0], 1)), X_train))  # Intercept addition
+        X_train = np.hstack(
+            (np.ones((X_train.shape[0], 1)), X_train)
+        )  # Intercept addition
         n, p = X_train.shape[0], X_train.shape[1]
 
-        L = (1 / (4 * n)) * np.linalg.norm(X_train.T @ X_train, ord=2)  # Lipschitz constant
+        L = (1 / (4 * n)) * np.linalg.norm(
+            X_train.T @ X_train, ord=2
+        )  # Lipschitz constant
 
         current_beta = np.zeros(p)
 
         for reg in sorted(self.lambdas, reverse=True):
-            beta = fista(X_train, y_train, current_beta, L, reg, max_iter, report_interval, verbose)
+            beta = fista(
+                X_train,
+                y_train,
+                current_beta,
+                L,
+                reg,
+                self.max_iter,
+                self.report_interval,
+                self.verbose,
+            )
             self.coefs_paths_[reg] = beta.copy()
 
-            if warm_start:
+            if self.warm_start:
                 current_beta = beta
             else:
                 current_beta = np.zeros(p)
 
         self.fitted = True
-        return
+        return self
 
-    def validate(self, X_valid: ArrayLike, y_valid: ArrayLike, measure: str, prob_threshold: float = 0.5):
+    def validate(
+        self,
+        X_valid: ArrayLike,
+        y_valid: ArrayLike,
+        measure: str,
+        prob_threshold: float = 0.5,
+    ) -> tuple[float, float]:
+        """
+        Validate the fitted model using the validation data.
+
+        Args:
+            X_valid (ArrayLike): The validation feature data.
+            y_valid (ArrayLike): The true labels for the validation data.
+            measure (str):  Measure to be used for validation (e.g., 'accuracy', 'f1', etc.).
+            prob_threshold (float, optional): Threshold for classifying probabilities. Defaults to 0.5.
+
+        Returns:
+            tuple[float, float]: A tuple containing the best mean score and the
+                                best mean score with one standard error.
+        """
         assert self.fitted, "Model is not fitted yet. Use 'fit' first."
         X_valid = np.hstack((np.ones((X_valid.shape[0], 1)), X_valid))
 
@@ -100,7 +157,18 @@ class LogisticLassoFistaCV:
 
         return mean_scores[best_idx], mean_scores[best_idx_1_se]
 
-    def predict_proba(self, X_test: ArrayLike, _1se: bool = False):
+    def predict_proba(self, X_test: ArrayLike, _1se: bool = False) -> ArrayLike:
+        """
+        Predict the probability estimates for the given input data.
+
+        Args:
+            X_test (ArrayLike): Input data for which to predict probabilities.
+            _1se (bool, optional): Whether to use beta that gives the best mean
+                score or the best mean score within one standard error. Defaults to False.
+
+        Returns:
+            ArrayLike: The predicted probabilities for each class for the input samples.
+        """
         assert self.fitted, "Model is not fitted yet. Use 'fit' first."
         assert self.validated, "Model is not validated yet. Use 'validate' first"
         assert len(X_test.shape) == 2
@@ -111,7 +179,21 @@ class LogisticLassoFistaCV:
         X_test = np.hstack((np.ones((X_test.shape[0], 1)), X_test))
         return sigmoid(X_test @ beta)
 
-    def predict(self, X_test: ArrayLike, prob_threshold: float = 0.5, _1se: bool = False):
+    def predict(
+        self, X_test: ArrayLike, prob_threshold: float = 0.5, _1se: bool = False
+    ) -> ArrayLike:
+        """
+        Predict the output for the given input data.
+
+        Args:
+            X_test (ArrayLike): Input data for which predictions are to be made.
+            prob_threshold (float, optional): Threshold for classifying probabilities. Defaults to 0.5.
+            _1se (bool, optional): Whether to use beta that gives the best mean
+                score or the best mean score within one standard error. Defaults to False.
+
+        Returns:
+            ArrayLike: Predicted output based on the input data.
+        """
         assert self.fitted, "Model is not fitted yet. Use 'fit' first."
         assert self.validated, "Model is not validated yet. Use 'validate' first"
 
@@ -122,6 +204,12 @@ class LogisticLassoFistaCV:
         return y_pred
 
     def plot_coefficients(self, figsize: tuple[int, int] = (10, 6)) -> None:
+        """
+        Plot the coefficients of the model against the regularization parameter (lambda).
+
+        Args:
+            figsize (tuple[int, int], optional): The size of the figure to be created. Defaults to (10, 6).
+        """
         assert self.fitted, "Model is not fitted yet. Use 'fit' first."
 
         lambdas_sorted = sorted(self.lambdas)
@@ -136,10 +224,21 @@ class LogisticLassoFistaCV:
         plt.axis("tight")
 
     def plot(self, measure: str) -> None:
-        assert self.all_validation_scores_, "Model is not validated yet. Use 'validate' first"
+        """
+        Plots the mean validation scores against the regularization parameter (lambda).
+
+        Args:
+            measure (str):  Measure to be used for validation (e.g., 'accuracy', 'f1', etc.).
+
+        """
+        assert (
+            self.all_validation_scores_
+        ), "Model is not validated yet. Use 'validate' first"
 
         lambdas = sorted(self.lambdas)
-        scores_matrix = np.array(self.all_validation_scores_)  # shape: (k_splits, p_lambdas)
+        scores_matrix = np.array(
+            self.all_validation_scores_
+        )  # shape: (k_splits, p_lambdas)
 
         mean_scores = np.mean(scores_matrix, axis=0)
         std_scores = np.std(scores_matrix, axis=0)
@@ -149,7 +248,14 @@ class LogisticLassoFistaCV:
         plt.scatter(lambdas, mean_scores, label="Mean Score", color="red", s=25)
 
         if scores_matrix.shape[0] > 1:
-            plt.errorbar(lambdas, mean_scores, std_scores, ecolor="gray", linestyle="None", capsize=2)
+            plt.errorbar(
+                lambdas,
+                mean_scores,
+                std_scores,
+                ecolor="gray",
+                linestyle="None",
+                capsize=2,
+            )
 
         plt.axvline(
             self.best_lambda_,
@@ -169,91 +275,8 @@ class LogisticLassoFistaCV:
         plt.xscale("log")
         plt.xlabel("Lambda")
         plt.ylabel(f"{measure} measure")
-        plt.title(f"{measure} measure vs Lambda (Repeated Holdout, n_splits={scores_matrix.shape[0]})")
+        plt.title(
+            f"{measure} measure vs Lambda (Repeated Holdout, n_splits={scores_matrix.shape[0]})"
+        )
         plt.legend()
         plt.show()
-
-
-def fista(X, y, beta, L, reg, max_iter, report_interval: int, verbose):
-    t = 1
-    c = beta
-
-    for k in range(max_iter):
-        z = c + (1 / L) * gradient(X, y, c)  # Gradient step
-        beta_new = soft_threshold_l1(z, L, reg)  # soft thresholding
-        t_new = (1 + np.sqrt(1 + 4 * t**2)) / 2  # t update
-        c = beta_new + ((t - 1) / t_new) * (beta_new - beta)  # Better step selection
-
-        beta = beta_new
-        t = t_new
-
-        log_lik = -log_likelihood_l1(X, y, beta, reg)
-        if verbose and k % report_interval == 0:
-            print(
-                f"Iter [{k:3d}/{max_iter}]. Log-lik: {log_lik:.4f} |"
-                f" Beta: {np.array2string(beta, formatter={'float_kind': lambda x: f"{x:.5f}"})}"
-            )
-
-    return beta
-
-
-def log_likelihood_l1(X, y, beta, reg):
-    z = X @ beta
-    log_1_exp_z = np.maximum(0, z) + np.log(1 + np.exp(-np.abs(z)))
-    loss = -np.mean(y * z - log_1_exp_z)
-    return loss + reg * np.sum(np.abs(beta[1:]))
-
-
-def sigmoid(z: ArrayLike) -> NDArray[np.float64]:
-    """Numerically stable sigmoid function
-
-    Args:
-        z (ArrayLike): Input value(s). Accepts a Python float/int, a list of numbers, or NumPy array of any shape.
-
-    Returns:
-        NDArray: Array of sigmoid values, same shape as input
-    """
-    z = np.asarray(z, dtype=np.float64)
-    return np.where(z >= 0, 1 / (1 + np.exp(-z)), np.exp(z) / (1 + np.exp(z)))
-
-
-def gradient(
-    X: NDArray[np.float64], y: NDArray[np.float64], beta: NDArray[np.float64]
-) -> NDArray[np.float64]:
-    """Computes the gradient of the log-likelihood for logistic regression.
-
-    Args:
-        X (NDArray[np.float64]): Feature matrix of shape (n_samples, n_features).
-        y (NDArray[np.float64]): Binary target vector with values 0 or 1 and shape (n_samples,).
-        beta (NDArray[np.float64]):  Coefficient vector of shape (n_features,).
-
-    Returns:
-        NDArray[np.float64]: Gradient vector of shape (n_features,).
-    """
-    n = X.shape[0]
-    z = X @ beta
-    p = sigmoid(z)
-    return (X.T @ (y - p)) / n
-
-
-def soft_threshold_l1(z, L, reg):
-    threshold = reg / L
-    res = np.sign(z) * np.maximum(np.abs(z) - threshold, 0)
-    res[0] = z[0]
-    return res
-
-
-def calculate_metric_value(y_true: np.array, y_pred: np.array, y_prob: np.array, measure: str) -> float:
-    metrics_funs = {
-        "recall": lambda: recall_score(y_true, y_pred),
-        "precision": lambda: precision_score(y_true, y_pred),
-        "f": lambda: f1_score(y_true, y_pred),
-        "balanced_accuracy": lambda: balanced_accuracy_score(y_true, y_pred),
-        "roc": lambda: roc_auc_score(y_true, y_prob),
-        "pr_auc": lambda: average_precision_score(y_true, y_prob),
-    }
-
-    if measure not in metrics_funs:
-        raise ValueError(f"Error: Invalid measure '{measure}'. Select from: {list(metrics_funs.keys())}")
-
-    return metrics_funs[measure]()
