@@ -64,7 +64,7 @@ class UnlabeledLogReg:
         Args:
             X (ArrayLike): Validation matrix of size (n_samples, n_features).
             y (ArrayLike): Target vector relative to X.
-            measure (str): Measure to be used for validation (e.g., 'accuracy', 'f1', etc.).
+            measure (str): Measure to be used for validation (e.g., 'balanced_accuracy', 'f1', etc.).
             prob_threshold (float, optional): Threshold for classifying probabilities. Defaults to 0.5.
 
         Returns:
@@ -145,7 +145,7 @@ class UnlabeledLogReg:
         Returns:
             tuple[ArrayLike, ArrayLike]: X and y without the records with missing y.
         """
-        missing_mask = y == -1
+        missing_mask = (y == -1).values
         return X[~missing_mask], y[~missing_mask]
 
     def _pseudo_labeling(
@@ -164,5 +164,5 @@ class UnlabeledLogReg:
         self.X_original = X.copy()
         self.y_original = y.copy()
 
-        missing_mask = y == -1
+        missing_mask = (y == -1).values
         return X[~missing_mask], y[~missing_mask]

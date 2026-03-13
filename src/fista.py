@@ -113,7 +113,7 @@ class LogisticLassoFistaCV:
         Args:
             X_valid (ArrayLike): The validation feature data.
             y_valid (ArrayLike): The true labels for the validation data.
-            measure (str):  Measure to be used for validation (e.g., 'accuracy', 'f1', etc.).
+            measure (str):  Measure to be used for validation (e.g., 'balaced_accuracy', 'f1', etc.).
             prob_threshold (float, optional): Threshold for classifying probabilities. Defaults to 0.5.
 
         Returns:
@@ -234,7 +234,7 @@ class LogisticLassoFistaCV:
         Plots the mean validation scores against the regularization parameter (lambda).
 
         Args:
-            measure (str):  Measure to be used for validation (e.g., 'accuracy', 'f1', etc.).
+            measure (str):  Measure to be used for validation (e.g., 'balanced_accuracy', 'f1', etc.).
 
         """
         assert (

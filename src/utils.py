@@ -2,14 +2,10 @@
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
-from sklearn.metrics import (
-    average_precision_score,
-    balanced_accuracy_score,
-    f1_score,
-    precision_score,
-    recall_score,
-    roc_auc_score,
-)
+from sklearn.metrics import (average_precision_score, balanced_accuracy_score,
+                             f1_score, precision_score, recall_score,
+                             roc_auc_score)
+
 
 def fista(X, y, beta, L, reg, max_iter, report_interval: int, verbose):
     t = 1
