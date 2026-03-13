@@ -51,6 +51,7 @@ def MAR1(
     feature_column: str,
     w: float = 1.0,
     b: float = 0.0,
+    probability: float = 0.5,
 ) -> pd.DataFrame:
     """
     Introduces missing values in the target variable y based on a logistic model
@@ -81,12 +82,16 @@ def MAR1(
 
     random_values = np.random.rand(len(y))
     mask = random_values < p_missing
+    
+    binomial_mask = np.random.binomial(n=1, p=probability, size = len(mask))
+    
+    mask = mask & binomial_mask
 
     return _add_missing_indicators(y_missing, mask)
 
 
 def MAR2(
-    X: pd.DataFrame, y: pd.DataFrame, W: ArrayLike | None = None, b: float = 0.0
+    X: pd.DataFrame, y: pd.DataFrame, W: ArrayLike | None = None, b: float = 0.0, probability: float = 0.5,
 ) -> pd.DataFrame:
     """
     Introduces missing values in the target variable y based on a logistic model
@@ -116,6 +121,10 @@ def MAR2(
 
     random_values = np.random.rand(len(y))
     mask = random_values < p_missing
+    
+    binomial_mask = np.random.binomial(n=1, p=probability, size = len(mask))
+    
+    mask = mask & binomial_mask
 
     return _add_missing_indicators(y_missing, mask)
 
@@ -126,6 +135,7 @@ def MNAR(
     w_x: float | None = None,
     w_y: float = 1.0,
     b: float = 0.0,
+    probability: float = 0.5,
 ) -> pd.DataFrame:
     """
     Generates missing data in a dataset based on a Missing Not At Random (MNAR) mechanism.
@@ -155,5 +165,9 @@ def MNAR(
 
     random_values = np.random.rand(len(y))
     mask = random_values < p_missing
+    
+    binomial_mask = np.random.binomial(n=1, p=probability, size = len(mask))
+    
+    mask = mask & binomial_mask
 
     return _add_missing_indicators(y_missing, mask)
