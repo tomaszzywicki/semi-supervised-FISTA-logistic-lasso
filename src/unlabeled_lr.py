@@ -15,7 +15,9 @@ class UnlabeledLogReg:
 
     def __init__(
         self,
-        y_imputation_method: Literal["random", "naive"] | None = "random",
+        y_imputation_method: (
+            Literal["random", "naive", "pseudo_labels"] | None
+        ) = "random",
     ) -> None:
         """
         Initialize the class based on the y imputation methods.
@@ -42,6 +44,15 @@ class UnlabeledLogReg:
         """
         X_complete, y_complete = self._impute(X, y_obs)
         self.model.fit(X_complete, y_complete)
+
+        if self.y_imputation_method == "pseudo_labels":
+            # train model on data without missing labels, predict them and train again
+            y_pred = self.model.predict(self.X_original)
+            y_all = self.y_original.copy()
+            missing_mask = y_all == -1
+            y_all[missing_mask] = y_pred[missing_mask]
+            self.model.fit(self.X_original, y_all)
+
         return self
 
     def validate(
@@ -104,9 +115,12 @@ class UnlabeledLogReg:
         if self.y_imputation_method == "random":
             return X_complete, self._random_imputation(y_complete)
 
+        if self.y_imputation_method == "pseudo_labels":
+            return self._pseudo_labeling(X_complete, y_complete)
+
     def _random_imputation(self, y: ArrayLike) -> ArrayLike:
         """
-        Randomly imputes missing values in the input array.
+        Randomly impute missing values in the input array.
 
         Args:
             y (ArrayLike): An array containing the data, where missing values are represented by -1.
@@ -122,7 +136,7 @@ class UnlabeledLogReg:
         self, X: ArrayLike, y: ArrayLike
     ) -> tuple[ArrayLike, ArrayLike]:
         """
-        Removes records with missing y.
+        Remove records with missing y.
 
         Args:
             X (ArrayLike): Training matrix of size (n_samples, n_features).
@@ -131,5 +145,24 @@ class UnlabeledLogReg:
         Returns:
             tuple[ArrayLike, ArrayLike]: X and y without the records with missing y.
         """
+        missing_mask = y == -1
+        return X[~missing_mask], y[~missing_mask]
+
+    def _pseudo_labeling(
+        self, X: ArrayLike, y: ArrayLike
+    ) -> tuple[ArrayLike, ArrayLike]:
+        """
+         Remove records with missing y, but save the original X and y.
+
+        Args:
+             X (ArrayLike): Training matrix of size (n_samples, n_features).
+             y (ArrayLike): An array containing the data, where missing values are represented by -1.
+
+         Returns:
+             tuple[ArrayLike, ArrayLike]: X and y without the records with missing y.
+        """
+        self.X_original = X.copy()
+        self.y_original = y.copy()
+
         missing_mask = y == -1
         return X[~missing_mask], y[~missing_mask]

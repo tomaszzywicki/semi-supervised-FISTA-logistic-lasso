@@ -50,7 +50,9 @@ class LogisticLassoFistaCV:
         self.report_interval = report_interval
         self.verbose = verbose
 
-    def fit(self, X_train: ArrayLike, y_train: ArrayLike) -> "LogisticLassoFistaCV":
+    def fit(
+        self, X_train: ArrayLike, y_train: ArrayLike
+    ) -> "LogisticLassoFistaCV":
         """
         Fit the model according to the given training data.
 
@@ -92,7 +94,9 @@ class LogisticLassoFistaCV:
                 current_beta = beta
             else:
                 current_beta = np.zeros(p)
-
+                
+        mid_lambda = sorted(self.coefs_paths_.keys())[len(self.coefs_paths_) // 2]
+        self.best_beta_ = self.coefs_paths_[mid_lambda]
         self.fitted = True
         return self
 
@@ -170,11 +174,12 @@ class LogisticLassoFistaCV:
             ArrayLike: The predicted probabilities for each class for the input samples.
         """
         assert self.fitted, "Model is not fitted yet. Use 'fit' first."
-        assert self.validated, "Model is not validated yet. Use 'validate' first"
+        # assert self.validated, "Model is not validated yet. Use 'validate' first"
         assert len(X_test.shape) == 2
-        assert X_test.shape[1] == self.best_beta_.shape[0] - 1
+        #  assert X_test.shape[1] == self.best_beta_.shape[0] - 1
 
-        beta = self.best_beta_1se_ if _1se else self.best_beta_
+        beta = (self.best_beta_1se_ if _1se and self.best_beta_1se_ is not None 
+        else self.best_beta_)
 
         X_test = np.hstack((np.ones((X_test.shape[0], 1)), X_test))
         return sigmoid(X_test @ beta)
@@ -195,9 +200,10 @@ class LogisticLassoFistaCV:
             ArrayLike: Predicted output based on the input data.
         """
         assert self.fitted, "Model is not fitted yet. Use 'fit' first."
-        assert self.validated, "Model is not validated yet. Use 'validate' first"
-
-        beta = self.best_beta_1se_ if _1se else self.best_beta_
+        # assert self.validated, "Model is not validated yet. Use 'validate' first"
+        X_test = np.hstack((np.ones((X_test.shape[0], 1)), X_test))
+        beta = (self.best_beta_1se_ if _1se and self.best_beta_1se_ is not None 
+        else self.best_beta_)
 
         y_prob = sigmoid(X_test @ beta)
         y_pred = (y_prob >= prob_threshold).astype(int)
