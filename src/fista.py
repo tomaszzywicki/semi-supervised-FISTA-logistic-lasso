@@ -17,6 +17,7 @@ class LogisticLassoFistaCV:
         self,
         lambdas: ArrayLike = None,
         max_iter: int = 100,
+        tol: float = 1e-6,
         warm_start: bool = True,
         report_interval: int = 10,
         verbose: bool = False,
@@ -27,6 +28,7 @@ class LogisticLassoFistaCV:
         Args:
             lambdas (ArrayLike, optional): Regularization strengths to be used. Defaults to None.
             max_iter (int, optional): Maximum number of iterations for the optimization algorithm. Defaults to 100.
+            tol (float):
             warm_start (bool, optional): Whether to reuse the solution of the previous call to fit as initialization. Defaults to True.
             report_interval (int, optional): Interval for reporting progress during fitting. Defaults to 10.
             verbose (bool, optional): If True, prints detailed information during fitting. Defaults to False.
@@ -46,13 +48,12 @@ class LogisticLassoFistaCV:
 
         # training parameters
         self.max_iter = max_iter
+        self.tol = tol
         self.warm_start = warm_start
         self.report_interval = report_interval
         self.verbose = verbose
 
-    def fit(
-        self, X_train: ArrayLike, y_train: ArrayLike
-    ) -> "LogisticLassoFistaCV":
+    def fit(self, X_train: ArrayLike, y_train: ArrayLike) -> "LogisticLassoFistaCV":
         """
         Fit the model according to the given training data.
 
@@ -63,17 +64,12 @@ class LogisticLassoFistaCV:
         Returns:
             LogisticLassoFistaCV: Fitted estimator.
         """
-        # TODO dodać żeby patrzyło czy zbiegło przed max_iter
         assert len(X_train.shape) == 2
 
-        X_train = np.hstack(
-            (np.ones((X_train.shape[0], 1)), X_train)
-        )  # Intercept addition
+        X_train = np.hstack((np.ones((X_train.shape[0], 1)), X_train))  # Intercept addition
         n, p = X_train.shape[0], X_train.shape[1]
 
-        L = (1 / (4 * n)) * np.linalg.norm(
-            X_train.T @ X_train, ord=2
-        )  # Lipschitz constant
+        L = (1 / (4 * n)) * np.linalg.norm(X_train.T @ X_train, ord=2)  # Lipschitz constant
 
         current_beta = np.zeros(p)
 
@@ -85,6 +81,7 @@ class LogisticLassoFistaCV:
                 L,
                 reg,
                 self.max_iter,
+                self.tol,
                 self.report_interval,
                 self.verbose,
             )
@@ -94,7 +91,7 @@ class LogisticLassoFistaCV:
                 current_beta = beta
             else:
                 current_beta = np.zeros(p)
-                
+
         mid_lambda = sorted(self.coefs_paths_.keys())[len(self.coefs_paths_) // 2]
         self.best_beta_ = self.coefs_paths_[mid_lambda]
         self.fitted = True
@@ -178,15 +175,12 @@ class LogisticLassoFistaCV:
         assert len(X_test.shape) == 2
         #  assert X_test.shape[1] == self.best_beta_.shape[0] - 1
 
-        beta = (self.best_beta_1se_ if _1se and self.best_beta_1se_ is not None 
-        else self.best_beta_)
+        beta = self.best_beta_1se_ if _1se and self.best_beta_1se_ is not None else self.best_beta_
 
         X_test = np.hstack((np.ones((X_test.shape[0], 1)), X_test))
         return sigmoid(X_test @ beta)
 
-    def predict(
-        self, X_test: ArrayLike, prob_threshold: float = 0.5, _1se: bool = False
-    ) -> ArrayLike:
+    def predict(self, X_test: ArrayLike, prob_threshold: float = 0.5, _1se: bool = False) -> ArrayLike:
         """
         Predict the output for the given input data.
 
@@ -202,8 +196,7 @@ class LogisticLassoFistaCV:
         assert self.fitted, "Model is not fitted yet. Use 'fit' first."
         # assert self.validated, "Model is not validated yet. Use 'validate' first"
         X_test = np.hstack((np.ones((X_test.shape[0], 1)), X_test))
-        beta = (self.best_beta_1se_ if _1se and self.best_beta_1se_ is not None 
-        else self.best_beta_)
+        beta = self.best_beta_1se_ if _1se and self.best_beta_1se_ is not None else self.best_beta_
 
         y_prob = sigmoid(X_test @ beta)
         y_pred = (y_prob >= prob_threshold).astype(int)
@@ -237,14 +230,10 @@ class LogisticLassoFistaCV:
             measure (str):  Measure to be used for validation (e.g., 'balanced_accuracy', 'f1', etc.).
 
         """
-        assert (
-            self.all_validation_scores_
-        ), "Model is not validated yet. Use 'validate' first"
+        assert self.all_validation_scores_, "Model is not validated yet. Use 'validate' first"
 
         lambdas = sorted(self.lambdas)
-        scores_matrix = np.array(
-            self.all_validation_scores_
-        )  # shape: (k_splits, p_lambdas)
+        scores_matrix = np.array(self.all_validation_scores_)  # shape: (k_splits, p_lambdas)
 
         mean_scores = np.mean(scores_matrix, axis=0)
         std_scores = np.std(scores_matrix, axis=0)
@@ -281,8 +270,6 @@ class LogisticLassoFistaCV:
         plt.xscale("log")
         plt.xlabel("Lambda")
         plt.ylabel(f"{measure} measure")
-        plt.title(
-            f"{measure} measure vs Lambda (Repeated Holdout, n_splits={scores_matrix.shape[0]})"
-        )
+        plt.title(f"{measure} measure vs Lambda (Repeated Holdout, n_splits={scores_matrix.shape[0]})")
         plt.legend()
         plt.show()

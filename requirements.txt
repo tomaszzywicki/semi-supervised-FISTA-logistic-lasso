@@ -1,2 +1,9 @@
 numpy
+pandas
 ipykernel
+ipython
+jupyter
+openml
+matplotlib
+scikit-learn
+ucimlrepo

@@ -2,20 +2,38 @@
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
-from sklearn.metrics import (average_precision_score, balanced_accuracy_score,
-                             f1_score, precision_score, recall_score,
-                             roc_auc_score)
+from sklearn.metrics import (
+    average_precision_score,
+    balanced_accuracy_score,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
 
 
-def fista(X, y, beta, L, reg, max_iter, report_interval: int, verbose):
+def fista(X, y, beta, L, reg, max_iter, tol, report_interval: int, verbose):
     t = 1
     c = beta
+
+    patience = 3
+    tol_counter = 0
 
     for k in range(max_iter):
         z = c + (1 / L) * gradient(X, y, c)  # Gradient step
         beta_new = soft_threshold_l1(z, L, reg)  # soft thresholding
         t_new = (1 + np.sqrt(1 + 4 * t**2)) / 2  # t update
         c = beta_new + ((t - 1) / t_new) * (beta_new - beta)  # Better step selection
+
+        diff = np.linalg.norm(beta_new - beta) / (np.linalg.norm(beta) + 1e-8)
+        if diff < tol:
+            tol_counter += 1
+            if tol_counter >= patience:
+                if verbose:
+                    print(f"FISTA converged at iter {k} | diff: {diff:.6e} ")
+                break
+        else:
+            tol_counter = 0
 
         beta = beta_new
         t = t_new
@@ -47,6 +65,7 @@ def sigmoid(z: ArrayLike) -> NDArray[np.float64]:
         NDArray: Array of sigmoid values, same shape as input
     """
     z = np.asarray(z, dtype=np.float64)
+    z = np.clip(z, -500, 500)
     return np.where(z >= 0, 1 / (1 + np.exp(-z)), np.exp(z) / (1 + np.exp(z)))
 
 
@@ -76,9 +95,7 @@ def soft_threshold_l1(z, L, reg):
     return res
 
 
-def calculate_metric_value(
-    y_true: np.array, y_pred: np.array, y_prob: np.array, measure: str
-) -> float:
+def calculate_metric_value(y_true: np.array, y_pred: np.array, y_prob: np.array, measure: str) -> float:
     metrics_funs = {
         "recall": lambda: recall_score(y_true, y_pred),
         "precision": lambda: precision_score(y_true, y_pred),
@@ -89,8 +106,6 @@ def calculate_metric_value(
     }
 
     if measure not in metrics_funs:
-        raise ValueError(
-            f"Error: Invalid measure '{measure}'. Select from: {list(metrics_funs.keys())}"
-        )
+        raise ValueError(f"Error: Invalid measure '{measure}'. Select from: {list(metrics_funs.keys())}")
 
     return metrics_funs[measure]()

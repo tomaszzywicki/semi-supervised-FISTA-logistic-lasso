@@ -16,8 +16,9 @@ class UnlabeledLogReg:
     def __init__(
         self,
         y_imputation_method: (
-            Literal["random", "naive", "pseudo_labels"] | None
+            Literal["random", "naive", "pseudo_labels", "iterative_pseudo_labels"] | None
         ) = "random",
+        imp_prob_threshold: float | None = 0.8,
     ) -> None:
         """
         Initialize the class based on the y imputation methods.
@@ -29,6 +30,7 @@ class UnlabeledLogReg:
                 - 'naive': missing y and corresponding records are simply omitted.
         """
         self.y_imputation_method = y_imputation_method
+        self.imp_prob_threshold = imp_prob_threshold
         self.model = LogisticLassoFistaCV()
 
     def fit(self, X: ArrayLike, y_obs: ArrayLike) -> "UnlabeledLogReg":
@@ -43,15 +45,47 @@ class UnlabeledLogReg:
             UnlabeledLogReg: Fitted estimator.
         """
         X_complete, y_complete = self._impute(X, y_obs)
+
         self.model.fit(X_complete, y_complete)
 
         if self.y_imputation_method == "pseudo_labels":
             # train model on data without missing labels, predict them and train again
             y_pred = self.model.predict(self.X_original)
+
             y_all = self.y_original.copy()
             missing_mask = y_all == -1
+
             y_all[missing_mask] = y_pred[missing_mask]
+
             self.model.fit(self.X_original, y_all)
+
+        elif self.y_imputation_method == "iterative_pseudo_labels":
+            y_not_completed = self.y_original.copy()
+            t = self.imp_prob_threshold
+
+            while True:
+                y_prob = self.model.predict_proba(self.X_original)
+
+                mask = (y_not_completed == -1) & ((y_prob >= t) | (y_prob <= 1 - t))
+                num_discovered = np.sum(mask > 0)
+                print(f"Discovered {num_discovered} new confident y values")
+
+                if num_discovered > 0:
+                    y_not_completed[mask] = (y_prob[mask] >= 0.5).astype(int)
+
+                    valid_mask = y_not_completed != -1
+                    X_train_step = self.X_original[valid_mask]
+                    y_train_step = y_not_completed[valid_mask]
+
+                    self.model.fit(X_train_step, y_train_step)
+                else:
+                    print("Ending iterative process. Assigning remaining y with 0.5 threshold...")
+                    final_mask = y_not_completed == -1
+
+                    if np.sum(final_mask) > 0:
+                        y_not_completed[final_mask] = (y_prob[final_mask] >= 0.5).astype(int)
+                        self.model.fit(self.X_original, y_not_completed)
+                    break
 
         return self
 
@@ -112,11 +146,14 @@ class UnlabeledLogReg:
         if self.y_imputation_method == "naive":
             return self._naive_imputation(X_complete, y_complete)
 
-        if self.y_imputation_method == "random":
+        elif self.y_imputation_method == "random":
             return X_complete, self._random_imputation(y_complete)
 
-        if self.y_imputation_method == "pseudo_labels":
+        elif self.y_imputation_method in ["pseudo_labels", "iterative_pseudo_labels"]:
             return self._pseudo_labeling(X_complete, y_complete)
+
+        else:
+            raise ValueError("Not existing imputation method.")
 
     def _random_imputation(self, y: ArrayLike) -> ArrayLike:
         """
@@ -132,9 +169,7 @@ class UnlabeledLogReg:
         y[missing_mask] = np.random.binomial(n=1, p=0.5, size=missing_mask.sum())
         return y
 
-    def _naive_imputation(
-        self, X: ArrayLike, y: ArrayLike
-    ) -> tuple[ArrayLike, ArrayLike]:
+    def _naive_imputation(self, X: ArrayLike, y: ArrayLike) -> tuple[ArrayLike, ArrayLike]:
         """
         Remove records with missing y.
 
@@ -148,9 +183,7 @@ class UnlabeledLogReg:
         missing_mask = (y == -1).values
         return X[~missing_mask], y[~missing_mask]
 
-    def _pseudo_labeling(
-        self, X: ArrayLike, y: ArrayLike
-    ) -> tuple[ArrayLike, ArrayLike]:
+    def _pseudo_labeling(self, X: ArrayLike, y: ArrayLike) -> tuple[ArrayLike, ArrayLike]:
         """
          Remove records with missing y, but save the original X and y.
 
@@ -161,8 +194,8 @@ class UnlabeledLogReg:
          Returns:
              tuple[ArrayLike, ArrayLike]: X and y without the records with missing y.
         """
-        self.X_original = X.copy()
-        self.y_original = y.copy()
+        self.X_original = np.asarray(X.copy())
+        self.y_original = np.asarray(y.copy())
 
         missing_mask = (y == -1).values
         return X[~missing_mask], y[~missing_mask]
