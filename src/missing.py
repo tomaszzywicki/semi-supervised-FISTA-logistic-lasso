@@ -37,10 +37,7 @@ def MCAR(y: pd.DataFrame, p: float = 0.2) -> pd.DataFrame:
 
     y_missing = y.copy()
 
-    n_samples = len(y)
-    n_missing = int(p * n_samples)
-    mask = np.zeros(len(y), dtype=bool)
-    mask[np.random.choice(len(y), n_missing, replace=False)] = True
+    mask = np.random.binomial(n=1, p=p, size = len(y)).astype(bool)
 
     return _add_missing_indicators(y_missing, mask)
 
@@ -63,7 +60,7 @@ def MAR1(
                           to determine the missingness.
         y (pd.DataFrame): The target variable DataFrame in which missing values
                           will be introduced.
-        feature_column (str): The name of the column in X that will be used to
+        feature_column (str): The index of the column in X that will be used to
                               model the missingness.
         w (float, optional): The weight applied to the feature values in the logistic
                              function. Defaults to 1.0.
@@ -83,7 +80,7 @@ def MAR1(
     random_values = np.random.rand(len(y))
     mask = random_values < p_missing
     
-    binomial_mask = np.random.binomial(n=1, p=probability, size = len(mask))
+    binomial_mask = np.random.binomial(n=1, p=probability, size = len(mask)).astype(bool)
     
     mask = mask & binomial_mask
 
@@ -122,7 +119,7 @@ def MAR2(
     random_values = np.random.rand(len(y))
     mask = random_values < p_missing
     
-    binomial_mask = np.random.binomial(n=1, p=probability, size = len(mask))
+    binomial_mask = np.random.binomial(n=1, p=probability, size = len(mask)).astype(bool)
     
     mask = mask & binomial_mask
 
@@ -166,7 +163,7 @@ def MNAR(
     random_values = np.random.rand(len(y))
     mask = random_values < p_missing
     
-    binomial_mask = np.random.binomial(n=1, p=probability, size = len(mask))
+    binomial_mask = np.random.binomial(n=1, p=probability, size = len(mask)).astype(bool)
     
     mask = mask & binomial_mask
 
