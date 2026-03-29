@@ -4,7 +4,10 @@ from typing import Literal
 
 import numpy as np
 from numpy.typing import ArrayLike
+from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import kneighbors_graph
+
+from xgboost import XGBClassifier
 
 from fista import LogisticLassoFistaCV
 
@@ -21,29 +24,29 @@ class UnlabeledLogReg:
                 "random",
                 "naive",
                 "pseudo_labels",
-                "iterative_pseudo_labels",
+                "self_trainingg",
                 "label_propagation",
             ]
             | None
         ) = "random",
-        imp_prob_threshold: float | None = 0.8,
+        k_best: int = 1,
     ) -> None:
         """
         Initialize the class based on the y imputation methods.
 
         Args:
             y_imputation_method (Literal['random', 'naive', 'pseudo_labels',
-                'iterative_pseudo_labels', 'label_propagation'] | None, optional):
+                'self_training', 'label_propagation'] | None, optional):
                 Y imputation methods to be used:
                 - 'random': missing y is drawn from the binomial distribution (default);
                 - 'naive': missing y and corresponding records are simply omitted.
                 - 'pseudo_labels'
-                - 'iterative_pseudo_labels'
+                - 'self_training'
                 - 'label_propagation'
         """
         self.y_imputation_method = y_imputation_method
-        self.imp_prob_threshold = imp_prob_threshold
         self.model = LogisticLassoFistaCV()
+        self.k_best = k_best
 
     def fit(self, X: ArrayLike, y_obs: ArrayLike) -> "UnlabeledLogReg":
         """
@@ -56,7 +59,10 @@ class UnlabeledLogReg:
         Returns:
             UnlabeledLogReg: Fitted estimator.
         """
-        X_complete, y_complete = self._impute(X, y_obs)
+        X = np.asarray(X)
+        y_obs = np.asarray(y_obs)
+
+        X_complete, y_complete = self._impute(X, y_obs)  # Subset with not missing y
 
         self.model.fit(X_complete, y_complete)
 
@@ -71,37 +77,56 @@ class UnlabeledLogReg:
 
             self.model.fit(self.X_original, y_all)
 
-        elif self.y_imputation_method == "iterative_pseudo_labels":
-            y_not_completed = self.y_original.copy()
-            t = self.imp_prob_threshold
+        elif self.y_imputation_method == "self_training":
+            k = self.k_best
 
-            while True:
-                y_prob = self.model.predict_proba(self.X_original)
+            # Trzeba potem podać classifier
+            # clf = XGBClassifier(
+            #     eta=0.3,
+            #     max_depth=6,
+            # )
+            clf = LogisticRegression(l1_ratio=0, C=10.0, max_iter=10_000)
 
-                mask = (y_not_completed == -1) & ((y_prob >= t) | (y_prob <= 1 - t))
-                num_discovered = np.sum(mask > 0)
-                print(f"Discovered {num_discovered} new confident y values")
+            X_train_step = X_complete
+            y_train_step = y_complete
 
-                if num_discovered > 0:
-                    y_not_completed[mask] = (y_prob[mask] >= 0.5).astype(int)
+            X_missing = X[y_obs == -1]
 
-                    valid_mask = y_not_completed != -1
-                    X_train_step = self.X_original[valid_mask]
-                    y_train_step = y_not_completed[valid_mask]
+            while len(X_missing) > 0:
+                clf.fit(X_train_step, y_train_step)
 
-                    self.model.fit(X_train_step, y_train_step)
-                else:
-                    print(
-                        "Ending iterative process. Assigning remaining y with 0.5 threshold..."
-                    )
-                    final_mask = y_not_completed == -1
+                if len(X_missing) < 2 * k:
+                    y_prob = clf.predict_proba(X_missing)
+                    y_pseudo_remaining = np.argmax(y_prob, axis=1)
 
-                    if np.sum(final_mask) > 0:
-                        y_not_completed[final_mask] = (
-                            y_prob[final_mask] >= 0.5
-                        ).astype(int)
-                        self.model.fit(self.X_original, y_not_completed)
+                    X_train_step = np.vstack([X_train_step, X_missing])
+                    y_train_step = np.concatenate((y_train_step, y_pseudo_remaining))
                     break
+
+                y_prob = clf.predict_proba(X_missing)
+                p0 = y_prob[:, 0]
+                p1 = y_prob[:, 1]
+
+                idx_class_0 = np.argsort(p0)[-k:]
+                idx_class_1 = np.argsort(p1)[-k:]
+
+                X_pseudo_0 = X_missing[idx_class_0]
+                X_pseudo_1 = X_missing[idx_class_1]
+
+                y_pseudo_0 = np.zeros(k, dtype=int)
+                y_pseudo_1 = np.ones(k, dtype=int)
+
+                X_top_k = np.vstack((X_pseudo_0, X_pseudo_1))
+                y_pseudo_k = np.concatenate((y_pseudo_0, y_pseudo_1))
+
+                X_train_step = np.vstack([X_train_step, X_top_k])
+                y_train_step = np.concatenate((y_train_step, y_pseudo_k))
+
+                idx_to_remove = np.concatenate(([idx_class_0, idx_class_1]))
+                X_missing = np.delete(X_missing, idx_to_remove, axis=0)
+
+            self.model.fit(X_train_step, y_train_step)
+            return self
 
         elif self.y_imputation_method == "label_propagattion":
 
@@ -125,10 +150,10 @@ class UnlabeledLogReg:
             F_prev = F.copy()
 
             while True:
-                # neighbors labels are weighted with probability 
+                # neighbors labels are weighted with probability
                 F = T @ F
                 labeled_mask = self.y_original != -1
-                F[labeled_mask] = Y[labeled_mask] # original labels
+                F[labeled_mask] = Y[labeled_mask]  # original labels
                 # if changes between iterations are small
                 if np.max(np.abs(F - F_prev)) < 1e-5:
                     break
@@ -202,7 +227,7 @@ class UnlabeledLogReg:
 
         elif self.y_imputation_method in [
             "pseudo_labels",
-            "iterative_pseudo_labels",
+            "self_training",
             "label_propagation",
         ]:
             return self._pseudo_labeling(X_complete, y_complete)
@@ -224,9 +249,7 @@ class UnlabeledLogReg:
         y[missing_mask] = np.random.binomial(n=1, p=0.5, size=missing_mask.sum())
         return y
 
-    def _naive_imputation(
-        self, X: ArrayLike, y: ArrayLike
-    ) -> tuple[ArrayLike, ArrayLike]:
+    def _naive_imputation(self, X: ArrayLike, y: ArrayLike) -> tuple[ArrayLike, ArrayLike]:
         """
         Remove records with missing y.
 
@@ -237,12 +260,10 @@ class UnlabeledLogReg:
         Returns:
             tuple[ArrayLike, ArrayLike]: X and y without the records with missing y.
         """
-        missing_mask = (y == -1).values
+        missing_mask = y == -1
         return X[~missing_mask], y[~missing_mask]
 
-    def _pseudo_labeling(
-        self, X: ArrayLike, y: ArrayLike
-    ) -> tuple[ArrayLike, ArrayLike]:
+    def _pseudo_labeling(self, X: ArrayLike, y: ArrayLike) -> tuple[ArrayLike, ArrayLike]:
         """
         Remove records with missing y, but save the original X and y.
 
@@ -256,5 +277,5 @@ class UnlabeledLogReg:
         self.X_original = np.asarray(X.copy())
         self.y_original = np.asarray(y.copy())
 
-        missing_mask = (y == -1).values
+        missing_mask = y == -1
         return X[~missing_mask], y[~missing_mask]

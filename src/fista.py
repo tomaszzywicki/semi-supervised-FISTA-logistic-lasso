@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numpy.typing import ArrayLike
 
-from utils import *
+from src.utils import *
 
 
 class LogisticLassoFistaCV:
@@ -19,7 +19,7 @@ class LogisticLassoFistaCV:
         max_iter: int = 100,
         tol: float = 1e-6,
         warm_start: bool = True,
-        report_interval: int = 10,
+        report_interval: int = 1,
         verbose: bool = False,
     ) -> None:
         """

@@ -41,7 +41,7 @@ def fista(X, y, beta, L, reg, max_iter, tol, report_interval: int, verbose):
         log_lik = -log_likelihood_l1(X, y, beta, reg)
         if verbose and k % report_interval == 0:
             print(
-                f"Iter [{k:3d}/{max_iter}]. Log-lik: {log_lik:.4f} | "
+                f"Iter [{k:3d}/{max_iter}]. Difference: {diff:.9f} | "
                 # f"Beta: {np.array2string(beta, formatter={"float_kind": lambda x: f"{x:.5f}"})}"
             )
 
