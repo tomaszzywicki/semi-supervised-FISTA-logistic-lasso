@@ -4,6 +4,7 @@ from typing import Literal
 
 import numpy as np
 from numpy.typing import ArrayLike
+from sklearn.neighbors import kneighbors_graph
 
 from fista import LogisticLassoFistaCV
 
@@ -16,7 +17,14 @@ class UnlabeledLogReg:
     def __init__(
         self,
         y_imputation_method: (
-            Literal["random", "naive", "pseudo_labels", "iterative_pseudo_labels"] | None
+            Literal[
+                "random",
+                "naive",
+                "pseudo_labels",
+                "iterative_pseudo_labels",
+                "label_propagation",
+            ]
+            | None
         ) = "random",
         imp_prob_threshold: float | None = 0.8,
     ) -> None:
@@ -24,10 +32,14 @@ class UnlabeledLogReg:
         Initialize the class based on the y imputation methods.
 
         Args:
-            y_imputation_method (Literal['random', 'naive'] | None, optional):
+            y_imputation_method (Literal['random', 'naive', 'pseudo_labels',
+                'iterative_pseudo_labels', 'label_propagation'] | None, optional):
                 Y imputation methods to be used:
                 - 'random': missing y is drawn from the binomial distribution (default);
                 - 'naive': missing y and corresponding records are simply omitted.
+                - 'pseudo_labels'
+                - 'iterative_pseudo_labels'
+                - 'label_propagation'
         """
         self.y_imputation_method = y_imputation_method
         self.imp_prob_threshold = imp_prob_threshold
@@ -79,13 +91,52 @@ class UnlabeledLogReg:
 
                     self.model.fit(X_train_step, y_train_step)
                 else:
-                    print("Ending iterative process. Assigning remaining y with 0.5 threshold...")
+                    print(
+                        "Ending iterative process. Assigning remaining y with 0.5 threshold..."
+                    )
                     final_mask = y_not_completed == -1
 
                     if np.sum(final_mask) > 0:
-                        y_not_completed[final_mask] = (y_prob[final_mask] >= 0.5).astype(int)
+                        y_not_completed[final_mask] = (
+                            y_prob[final_mask] >= 0.5
+                        ).astype(int)
                         self.model.fit(self.X_original, y_not_completed)
                     break
+
+        elif self.y_imputation_method == "label_propagattion":
+
+            # knn graph with distances between points
+            W = kneighbors_graph(X, n_neighbors=5, mode="distance").toarray()
+            zero_mask = W == 0
+
+            # gaussian kernel (distances -> similarities)
+            sigma = 1.0
+            W = np.exp((-(W**2)) / sigma**2)
+            W[zero_mask] = 0
+
+            # normalizing to create T (T = probabilities)
+            row_sums = W.sum(axis=1)
+            row_sums[row_sums == 0] = 1
+            T = W / row_sums[:, np.newaxis]
+
+            Y = self.y_original.copy()  # original labels
+            F = self.y_original.copy()  # current labels
+            F[F == -1] = 0
+            F_prev = F.copy()
+
+            while True:
+                # neighbors labels are weighted with probability 
+                F = T @ F
+                labeled_mask = self.y_original != -1
+                F[labeled_mask] = Y[labeled_mask] # original labels
+                # if changes between iterations are small
+                if np.max(np.abs(F - F_prev)) < 1e-5:
+                    break
+
+                F_prev = F.copy()
+
+            y_completed = F.copy()
+            self.model.fit(self.X_original, y_completed)
 
         return self
 
@@ -149,7 +200,11 @@ class UnlabeledLogReg:
         elif self.y_imputation_method == "random":
             return X_complete, self._random_imputation(y_complete)
 
-        elif self.y_imputation_method in ["pseudo_labels", "iterative_pseudo_labels"]:
+        elif self.y_imputation_method in [
+            "pseudo_labels",
+            "iterative_pseudo_labels",
+            "label_propagation",
+        ]:
             return self._pseudo_labeling(X_complete, y_complete)
 
         else:
@@ -169,7 +224,9 @@ class UnlabeledLogReg:
         y[missing_mask] = np.random.binomial(n=1, p=0.5, size=missing_mask.sum())
         return y
 
-    def _naive_imputation(self, X: ArrayLike, y: ArrayLike) -> tuple[ArrayLike, ArrayLike]:
+    def _naive_imputation(
+        self, X: ArrayLike, y: ArrayLike
+    ) -> tuple[ArrayLike, ArrayLike]:
         """
         Remove records with missing y.
 
@@ -183,16 +240,18 @@ class UnlabeledLogReg:
         missing_mask = (y == -1).values
         return X[~missing_mask], y[~missing_mask]
 
-    def _pseudo_labeling(self, X: ArrayLike, y: ArrayLike) -> tuple[ArrayLike, ArrayLike]:
+    def _pseudo_labeling(
+        self, X: ArrayLike, y: ArrayLike
+    ) -> tuple[ArrayLike, ArrayLike]:
         """
-         Remove records with missing y, but save the original X and y.
+        Remove records with missing y, but save the original X and y.
 
         Args:
-             X (ArrayLike): Training matrix of size (n_samples, n_features).
-             y (ArrayLike): An array containing the data, where missing values are represented by -1.
+            X (ArrayLike): Training matrix of size (n_samples, n_features).
+            y (ArrayLike): An array containing the data, where missing values are represented by -1.
 
-         Returns:
-             tuple[ArrayLike, ArrayLike]: X and y without the records with missing y.
+        Returns:
+            tuple[ArrayLike, ArrayLike]: X and y without the records with missing y.
         """
         self.X_original = np.asarray(X.copy())
         self.y_original = np.asarray(y.copy())
