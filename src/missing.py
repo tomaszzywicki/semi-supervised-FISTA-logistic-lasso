@@ -163,11 +163,11 @@ def MNAR(
     X_stds = X.std(axis=0).to_numpy(copy=True)
     X_stds[X_stds == 0] = 1.0
 
-    # Użycie bezpiecznego API do standaryzacji
     X_scaled = (X.to_numpy(copy=True) - X.mean(axis=0).to_numpy(copy=True)) / X_stds
 
     y_true = y_missing["Y_true_unobserved"].to_numpy(copy=True)
     y_std = np.std(y_true)
+
     if y_std == 0:
         y_std = 1.0
 

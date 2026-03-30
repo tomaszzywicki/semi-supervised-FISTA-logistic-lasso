@@ -6,6 +6,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import kneighbors_graph
+from sklearn.base import BaseEstimator, ClassifierMixin, clone
 
 from xgboost import XGBClassifier
 
@@ -24,12 +25,13 @@ class UnlabeledLogReg:
                 "random",
                 "naive",
                 "pseudo_labels",
-                "self_trainingg",
+                "self_training",
                 "label_propagation",
             ]
             | None
         ) = "random",
         k_best: int = 1,
+        base_estimator: BaseEstimator | None = None,
     ) -> None:
         """
         Initialize the class based on the y imputation methods.
@@ -47,6 +49,7 @@ class UnlabeledLogReg:
         self.y_imputation_method = y_imputation_method
         self.model = LogisticLassoFistaCV()
         self.k_best = k_best
+        self.base_estimator = base_estimator
 
     def fit(self, X: ArrayLike, y_obs: ArrayLike) -> "UnlabeledLogReg":
         """
@@ -66,102 +69,99 @@ class UnlabeledLogReg:
 
         self.model.fit(X_complete, y_complete)
 
-        if self.y_imputation_method == "pseudo_labels":
-            # train model on data without missing labels, predict them and train again
-            y_pred = self.model.predict(self.X_original)
+        _imputation_methods = {
+            "pseudo_labels": self._fit_pseudo_labels,
+            "self_training": self._fit_self_training,
+            "label_propagation": self._fit_label_propagation,
+        }
 
-            y_all = self.y_original.copy()
-            missing_mask = y_all == -1
+        if self.y_imputation_method in _imputation_methods:
+            _imputation_methods[self.y_imputation_method](X, y_obs, X_complete, y_complete)
 
-            y_all[missing_mask] = y_pred[missing_mask]
+        return self
 
-            self.model.fit(self.X_original, y_all)
+    def _fit_pseudo_labels(self, X, y_obs, X_complete, y_complete) -> None:
+        # train model on data without missing labels, predict them and train again
+        y_pred = self.model.predict(self.X_original)
 
-        elif self.y_imputation_method == "self_training":
-            k = self.k_best
+        y_all = self.y_original.copy()
+        missing_mask = y_all == -1
 
-            # Trzeba potem podać classifier
-            # clf = XGBClassifier(
-            #     eta=0.3,
-            #     max_depth=6,
-            # )
-            clf = LogisticRegression(l1_ratio=0, C=10.0, max_iter=10_000)
+        y_all[missing_mask] = y_pred[missing_mask]
 
-            X_train_step = X_complete
-            y_train_step = y_complete
+        self.model.fit(self.X_original, y_all)
 
-            X_missing = X[y_obs == -1]
+    def _fit_self_training(self, X, y_obs, X_complete, y_complete) -> None:
+        # Base estimator
+        if self.base_estimator is None:
+            clf = clone(self.model)
+        else:
+            clf = clone(self.base_estimator)
 
-            while len(X_missing) > 0:
-                clf.fit(X_train_step, y_train_step)
+        # Data without missing Y for training
+        X_train = X_complete.copy()
+        y_train = y_complete.copy()
 
-                if len(X_missing) < 2 * k:
-                    y_prob = clf.predict_proba(X_missing)
-                    y_pseudo_remaining = np.argmax(y_prob, axis=1)
+        # X for missing Y
+        X_missing = X[y_obs == -1]
 
-                    X_train_step = np.vstack([X_train_step, X_missing])
-                    y_train_step = np.concatenate((y_train_step, y_pseudo_remaining))
-                    break
+        k = self.k_best
 
-                y_prob = clf.predict_proba(X_missing)
-                p0 = y_prob[:, 0]
-                p1 = y_prob[:, 1]
+        while len(X_missing) > 0:
+            clf.fit(X_train, y_train)
 
-                idx_class_0 = np.argsort(p0)[-k:]
-                idx_class_1 = np.argsort(p1)[-k:]
+            y_prob = clf.predict_proba(X_missing)
 
-                X_pseudo_0 = X_missing[idx_class_0]
-                X_pseudo_1 = X_missing[idx_class_1]
+            if len(X_missing) < 2 * k:
+                y_pseudo_remaining = np.argmax(y_prob, axis=1)
 
-                y_pseudo_0 = np.zeros(k, dtype=int)
-                y_pseudo_1 = np.ones(k, dtype=int)
+                X_train = np.vstack([X_train, X_missing])
+                y_train = np.concatenate((y_train, y_pseudo_remaining))
+                break
 
-                X_top_k = np.vstack((X_pseudo_0, X_pseudo_1))
-                y_pseudo_k = np.concatenate((y_pseudo_0, y_pseudo_1))
+            idx_class_0 = np.argsort(y_prob[:, 0])[-k:]
+            idx_class_1 = np.argsort(y_prob[:, 1])[-k:]
+            idx_to_add = np.union1d(idx_class_0, idx_class_1)
 
-                X_train_step = np.vstack([X_train_step, X_top_k])
-                y_train_step = np.concatenate((y_train_step, y_pseudo_k))
+            X_train = np.vstack([X_train, X_missing[idx_to_add]])
+            y_train = np.concatenate([y_train, np.argmax(y_prob[idx_to_add], axis=1)])
+            X_missing = np.delete(X_missing, idx_to_add, axis=0)
 
-                idx_to_remove = np.concatenate(([idx_class_0, idx_class_1]))
-                X_missing = np.delete(X_missing, idx_to_remove, axis=0)
+        self.model.fit(X_train, y_train)
 
-            self.model.fit(X_train_step, y_train_step)
-            return self
+    def _fit_label_propagation(self, X, y_obs, X_complete, y_complete) -> None:
+        # knn graph with distances between points
+        W = kneighbors_graph(X, n_neighbors=5, mode="distance").toarray()
+        zero_mask = W == 0
 
-        elif self.y_imputation_method == "label_propagattion":
+        # gaussian kernel (distances -> similarities)
+        sigma = 1.0
+        W = np.exp((-(W**2)) / sigma**2)
+        W[zero_mask] = 0
 
-            # knn graph with distances between points
-            W = kneighbors_graph(X, n_neighbors=5, mode="distance").toarray()
-            zero_mask = W == 0
+        # normalizing to create T (T = probabilities)
+        row_sums = W.sum(axis=1)
+        row_sums[row_sums == 0] = 1
+        T = W / row_sums[:, np.newaxis]
 
-            # gaussian kernel (distances -> similarities)
-            sigma = 1.0
-            W = np.exp((-(W**2)) / sigma**2)
-            W[zero_mask] = 0
+        Y = self.y_original.copy()  # original labels
+        F = self.y_original.copy()  # current labels
+        F[F == -1] = 0
+        F_prev = F.copy()
 
-            # normalizing to create T (T = probabilities)
-            row_sums = W.sum(axis=1)
-            row_sums[row_sums == 0] = 1
-            T = W / row_sums[:, np.newaxis]
+        while True:
+            # neighbors labels are weighted with probability
+            F = T @ F
+            labeled_mask = self.y_original != -1
+            F[labeled_mask] = Y[labeled_mask]  # original labels
+            # if changes between iterations are small
+            if np.max(np.abs(F - F_prev)) < 1e-5:
+                break
 
-            Y = self.y_original.copy()  # original labels
-            F = self.y_original.copy()  # current labels
-            F[F == -1] = 0
             F_prev = F.copy()
 
-            while True:
-                # neighbors labels are weighted with probability
-                F = T @ F
-                labeled_mask = self.y_original != -1
-                F[labeled_mask] = Y[labeled_mask]  # original labels
-                # if changes between iterations are small
-                if np.max(np.abs(F - F_prev)) < 1e-5:
-                    break
-
-                F_prev = F.copy()
-
-            y_completed = F.copy()
-            self.model.fit(self.X_original, y_completed)
+        y_completed = F.copy()
+        self.model.fit(self.X_original, y_completed)
 
         return self
 
