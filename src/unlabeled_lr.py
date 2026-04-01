@@ -4,11 +4,8 @@ from typing import Literal
 
 import numpy as np
 from numpy.typing import ArrayLike
-from sklearn.linear_model import LogisticRegression
+from sklearn.base import BaseEstimator, clone
 from sklearn.neighbors import kneighbors_graph
-from sklearn.base import BaseEstimator, ClassifierMixin, clone
-
-from xgboost import XGBClassifier
 
 from fista import LogisticLassoFistaCV
 

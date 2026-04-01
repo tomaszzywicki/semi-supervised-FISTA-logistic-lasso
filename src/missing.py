@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
-from numpy.typing import ArrayLike
 from numpy import ndarray
+from numpy.typing import ArrayLike
 from scipy.special import expit
 
 

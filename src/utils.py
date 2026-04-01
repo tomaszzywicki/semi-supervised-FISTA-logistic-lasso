@@ -1,15 +1,11 @@
 """This file contains helper functions."""
 
 import numpy as np
+import pandas as pd
 from numpy.typing import ArrayLike, NDArray
-from sklearn.metrics import (
-    average_precision_score,
-    balanced_accuracy_score,
-    f1_score,
-    precision_score,
-    recall_score,
-    roc_auc_score,
-)
+from sklearn.metrics import (average_precision_score, balanced_accuracy_score,
+                             f1_score, precision_score, recall_score,
+                             roc_auc_score)
 
 
 def fista(X, y, beta, L, reg, max_iter, tol, report_interval: int, verbose):
@@ -95,7 +91,9 @@ def soft_threshold_l1(z, L, reg):
     return res
 
 
-def calculate_metric_value(y_true: np.array, y_pred: np.array, y_prob: np.array, measure: str) -> float:
+def calculate_metric_value(
+    y_true: np.array, y_pred: np.array, y_prob: np.array, measure: str
+) -> float:
     metrics_funs = {
         "recall": lambda: recall_score(y_true, y_pred),
         "precision": lambda: precision_score(y_true, y_pred),
@@ -106,6 +104,57 @@ def calculate_metric_value(y_true: np.array, y_pred: np.array, y_prob: np.array,
     }
 
     if measure not in metrics_funs:
-        raise ValueError(f"Error: Invalid measure '{measure}'. Select from: {list(metrics_funs.keys())}")
+        raise ValueError(
+            f"Error: Invalid measure '{measure}'. Select from: {list(metrics_funs.keys())}"
+        )
 
     return metrics_funs[measure]()
+
+
+def load_arff(filepath):
+    columns = []
+    data = []
+    in_data = False
+
+    with open(filepath, "r") as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("%") or not line:
+                continue
+            if line.upper().startswith("@ATTRIBUTE"):
+                parts = line.split(None, 2)
+                col_name = parts[1]
+                columns.append(col_name)
+            elif line.upper().startswith("@DATA"):
+                in_data = True
+            elif in_data:
+                data.append(line.split(","))
+
+    return pd.DataFrame(data, columns=columns)
+
+
+def set_best_st_approach(df):
+    df_st = df[df["Approach"] == "self_training"].copy()
+    df_st["Config"] = df_st["base_estimator"] + "_k=" + df_st["k_best"].astype(str)
+
+    # best in terms of median for F1
+    global_medians = df_st.groupby("Config")["F1"].median()
+    best_config = global_medians.idxmax()
+    print(f"Best Self-Training configuration: {best_config}")
+
+    best_estimator = best_config.split("_k=")[0]
+    best_k =int(float(best_config.split('_k=')[1]))
+    # best_k = 1
+    mask_other = df["Approach"] != "self_training"
+    mask_best_st = (
+        (df["Approach"] == "self_training")
+        & (df["base_estimator"] == best_estimator)
+        & (df["k_best"] == int(best_k))
+    )
+
+    df_plot = df[mask_other | mask_best_st].copy()
+
+    df_plot.loc[df_plot["Approach"] == "self_training", "Approach"] = (
+        f"Self-Training ({best_config})"
+    )
+    return df_plot
