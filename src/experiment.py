@@ -69,7 +69,7 @@ def run_experiment(
     for seed in seeds:
 
         np.random.seed(seed)
-        logger.log(f"\n{'='*40}\nExperiment for SEED: {seed}\n{'='*40}")
+        logger.info(f"Experiment for SEED: {seed}")
 
         # Train (60%), Val (20%), Test (20%)
 
@@ -118,7 +118,7 @@ def run_experiment(
 
         # oracle
         if verbose:
-            logger.log("Training approach ORACLE...")
+            logger.info("Training approach ORACLE...")
         oracle_model = UnlabeledLogReg(y_imputation_method="naive")
         oracle_model.fit(X_train, y_train_without_missing)
 
@@ -139,6 +139,7 @@ def run_experiment(
                 "Balanced_Acc": balanced_accuracy_score(y_test, y_pred_oracle),
                 "F1": f1_score(y_test, y_pred_oracle),
                 "ROC_AUC": roc_auc_score(y_test, y_prob_oracle),
+                "Imputation_score": []
             }
         )
 
@@ -148,7 +149,7 @@ def run_experiment(
             scheme_type = config["type"]
 
             if verbose:
-                logger.log(f"Testing scheme: {scheme_name}")
+                logger.info(f"Testing scheme: {scheme_name}")
 
             if scheme_type == "MCAR":
                 y_missing_df = MCAR(y_train_df, **config["params"])
@@ -173,7 +174,7 @@ def run_experiment(
             missing_pct = round((missing_count / total_count) * 100, 2)
 
             if verbose:
-                logger.log(
+                logger.info(
                     f"Deleted {missing_pct}% y info ({missing_count}/{total_count})"
                 )
 
@@ -181,7 +182,7 @@ def run_experiment(
             for approach in approaches:
 
                 if verbose:
-                    logger.log(f"Approach: {approach}")
+                    logger.info(f"Approach: {approach}")
 
                 if approach == "self_training":
                     classifiers = [
@@ -199,7 +200,7 @@ def run_experiment(
                                 k_best=k,
                                 base_estimator=classifier,
                             )
-                            ulr_model.fit(X_train, y_train_obs)
+                            ulr_model.fit(X_train, y_train_obs, y_train_df["Y_true_unobserved"])
 
                             # valdiation
                             ulr_model.validate(
@@ -224,13 +225,14 @@ def run_experiment(
                                     ),
                                     "F1": f1_score(y_test, y_pred),
                                     "ROC_AUC": roc_auc_score(y_test, y_prob),
+                                    "Imputation_score": ulr_model.imputation_scores
                                 }
                             )
 
                     continue
 
                 ulr_model = UnlabeledLogReg(y_imputation_method=approach)
-                ulr_model.fit(X_train, y_train_obs)
+                ulr_model.fit(X_train, y_train_obs, y_train_df["Y_true_unobserved"])
 
                 # valdiation
                 ulr_model.validate(X_val, y_val, measure="balanced_accuracy")
@@ -251,10 +253,11 @@ def run_experiment(
                         "Balanced_Acc": balanced_accuracy_score(y_test, y_pred),
                         "F1": f1_score(y_test, y_pred),
                         "ROC_AUC": roc_auc_score(y_test, y_prob),
+                        "Imputation_score": ulr_model.imputation_scores
                     }
                 )
 
     results_df = pd.DataFrame(results)
-    logger.log("End of experiment")
+    logger.info("End of experiment")
 
     return results_df
