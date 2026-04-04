@@ -95,7 +95,7 @@ def MAR1(
 def MAR2(
     X: pd.DataFrame,
     y: pd.DataFrame,
-    W: ArrayLike | None = None,
+    W: float | ndarray | None = None,
     b: float = 0.0,
 ) -> pd.DataFrame:
     """
@@ -126,6 +126,8 @@ def MAR2(
 
     if W is None:
         W = np.random.randn(X.shape[1])
+    if type(W) == float:
+        W = np.ones(X.shape[1]) * float
 
     z = np.dot(X_scaled, W) + b
     p_missing = expit(z)
@@ -138,7 +140,7 @@ def MAR2(
 def MNAR(
     X: pd.DataFrame,
     y: pd.DataFrame,
-    w_x: ndarray | None = None,
+    w_x: float | ndarray | None = None,
     w_y: float = 1.0,
     b: float = 0.0,
 ) -> pd.DataFrame:
@@ -175,6 +177,8 @@ def MNAR(
 
     if w_x is None:
         w_x = np.random.randn(X.shape[1])
+    elif type(w_x) == float:
+        w_x = np.ones(X.shape[1]) * w_x
 
     z = np.dot(X_scaled, w_x) + (w_y * y_scaled) + b
     p_missing = expit(z)

@@ -9,7 +9,7 @@ from sklearn.base import BaseEstimator, clone
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.neighbors import kneighbors_graph
 
-from fista import LogisticLassoFistaCV
+from src.fista import LogisticLassoFistaCV
 
 
 class UnlabeledLogReg:
@@ -56,9 +56,7 @@ class UnlabeledLogReg:
         self.sigma = sigma
         self.base_estimator = base_estimator
 
-    def fit(
-        self, X: ArrayLike, y_obs: ArrayLike, y_true: ArrayLike | None = None
-    ) -> "UnlabeledLogReg":
+    def fit(self, X: ArrayLike, y_obs: ArrayLike, y_true: ArrayLike | None = None) -> "UnlabeledLogReg":
         """
         Fit the model according to the given training data.
 
@@ -89,9 +87,7 @@ class UnlabeledLogReg:
         }
 
         if self.y_imputation_method in _imputation_methods:
-            _imputation_methods[self.y_imputation_method](
-                X, y_obs, X_complete, y_complete
-            )
+            _imputation_methods[self.y_imputation_method](X, y_obs, X_complete, y_complete)
 
         return self
 
@@ -223,9 +219,7 @@ class UnlabeledLogReg:
         y_completed = (F >= 0.5).astype(int)
         self.model.fit(self.X_original, y_completed)
 
-    def _calculate_imputation_performance(
-        self, y_obs: ArrayLike, y_imput_curr: ArrayLike
-    ) -> None:
+    def _calculate_imputation_performance(self, y_obs: ArrayLike, y_imput_curr: ArrayLike) -> None:
         """Calculate balanced accuracy of iterative imputation method."""
         if not hasattr(self, "y_true"):
             return
@@ -233,9 +227,7 @@ class UnlabeledLogReg:
         y_true_missing = self.y_true[missing_mask]
         y_imput_missing = y_imput_curr[missing_mask]
         valid_mask = y_imput_missing != -1
-        score = balanced_accuracy_score(
-            y_true_missing[valid_mask], y_imput_missing[valid_mask]
-        )
+        score = balanced_accuracy_score(y_true_missing[valid_mask], y_imput_missing[valid_mask])
         self.imputation_scores.append(score)
 
     def validate(
@@ -322,9 +314,7 @@ class UnlabeledLogReg:
         y[missing_mask] = np.random.binomial(n=1, p=0.5, size=missing_mask.sum())
         return y
 
-    def _naive_imputation(
-        self, X: ArrayLike, y: ArrayLike
-    ) -> tuple[ArrayLike, ArrayLike]:
+    def _naive_imputation(self, X: ArrayLike, y: ArrayLike) -> tuple[ArrayLike, ArrayLike]:
         """
         Remove records with missing y.
 
@@ -338,9 +328,7 @@ class UnlabeledLogReg:
         missing_mask = y == -1
         return X[~missing_mask], y[~missing_mask]
 
-    def _pseudo_labeling(
-        self, X: ArrayLike, y: ArrayLike
-    ) -> tuple[ArrayLike, ArrayLike]:
+    def _pseudo_labeling(self, X: ArrayLike, y: ArrayLike) -> tuple[ArrayLike, ArrayLike]:
         """
         Remove records with missing y, but save the original X and y.
 
