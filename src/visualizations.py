@@ -38,9 +38,7 @@ def plot_experiment_results(df: pd.DataFrame, metric: str, dataset: str) -> None
 
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    ax.yaxis.grid(
-        True, linestyle="--", color=COLORS["GRID"], alpha=ALPHA["GRID"], zorder=0
-    )
+    ax.yaxis.grid(True, linestyle="--", color=COLORS["GRID"], alpha=ALPHA["GRID"], zorder=0)
     ax.xaxis.grid(False)
 
     colors = COLOR_PALETTE[:n_approaches]
@@ -74,10 +72,7 @@ def plot_experiment_results(df: pd.DataFrame, metric: str, dataset: str) -> None
         approach_data = []
         for scheme in schemes:
             vals = (
-                plot_data[
-                    (plot_data["Scheme"] == scheme)
-                    & (plot_data["Approach"] == approach)
-                ][metric]
+                plot_data[(plot_data["Scheme"] == scheme) & (plot_data["Approach"] == approach)][metric]
                 .dropna()
                 .values
             )
@@ -93,9 +88,7 @@ def plot_experiment_results(df: pd.DataFrame, metric: str, dataset: str) -> None
             widths=width * 0.85,
             patch_artist=True,
             zorder=3,
-            boxprops=dict(
-                facecolor=colors[i], color=colors[i], alpha=0.75, linewidth=1.5
-            ),
+            boxprops=dict(facecolor=colors[i], color=colors[i], alpha=0.75, linewidth=1.5),
             capprops=dict(color=COLORS["CAP"], linewidth=1.5),
             whiskerprops=dict(color=COLORS["WHISKER"], linewidth=1.5, linestyle="-"),
             flierprops=dict(
@@ -117,9 +110,7 @@ def plot_experiment_results(df: pd.DataFrame, metric: str, dataset: str) -> None
         )
 
     ax.set_xticks(x_base)
-    ax.set_xticklabels(
-        schemes, rotation=35, ha="right", fontsize=11, color=COLORS["TICKS"]
-    )
+    ax.set_xticklabels(schemes, rotation=35, ha="right", fontsize=11, color=COLORS["TICKS"])
 
     ax.set_ylabel(
         f"{METRICS_MAP.get(metric, metric)} (test data)",
@@ -165,17 +156,10 @@ def generate_summary_table(df: pd.DataFrame) -> pd.DataFrame:
     for col in metrics:
         if col == "Missing_Percent":
             summary_df[col] = (
-                mean_df[col].map("{:.1f}".format)
-                + "% ± "
-                + std_df[col].map("{:.1f}".format)
-                + "%"
+                mean_df[col].map("{:.1f}".format) + "% ± " + std_df[col].map("{:.1f}".format) + "%"
             )
         else:
-            summary_df[col] = (
-                mean_df[col].map("{:.3f}".format)
-                + " ± "
-                + std_df[col].map("{:.3f}".format)
-            )
+            summary_df[col] = mean_df[col].map("{:.3f}".format) + " ± " + std_df[col].map("{:.3f}".format)
 
     return summary_df.reset_index()
 
@@ -224,15 +208,11 @@ def plot_sigma_results(results_df):
             stds = np.array(stds)
 
             ax.plot(sigmas, means, marker="o", linewidth=2, color="#378ADD", zorder=3)
-            ax.fill_between(
-                sigmas, means - stds, means + stds, alpha=0.2, color="#378ADD"
-            )
+            ax.fill_between(sigmas, means - stds, means + stds, alpha=0.2, color="#378ADD")
 
             for sigma in sigmas:
                 vals = df_scheme[df_scheme["sigma"] == sigma][metric].dropna().values
-                ax.scatter(
-                    [sigma] * len(vals), vals, color="gray", alpha=0.4, s=20, zorder=2
-                )
+                ax.scatter([sigma] * len(vals), vals, color="gray", alpha=0.4, s=20, zorder=2)
 
             if row_idx == 0:
                 ax.set_title(scheme, fontsize=11)

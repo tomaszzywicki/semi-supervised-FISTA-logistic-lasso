@@ -83,9 +83,7 @@ def run_experiment(
 
         # Train (60%), Val (20%), Test (20%)
 
-        X_temp, X_test, y_temp, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=seed, stratify=y
-        )
+        X_temp, X_test, y_temp, y_test = train_test_split(X, y, test_size=0.2, random_state=seed, stratify=y)
 
         X_train, X_val, y_train, y_val = train_test_split(
             X_temp, y_temp, test_size=0.25, random_state=seed, stratify=y_temp
@@ -105,9 +103,7 @@ def run_experiment(
 
         X_train_df = pd.DataFrame(X_train).reset_index(drop=True)
 
-        y_train_df = pd.DataFrame(y_train, columns=["Y_true_unobserved"]).reset_index(
-            drop=True
-        )
+        y_train_df = pd.DataFrame(y_train, columns=["Y_true_unobserved"]).reset_index(drop=True)
         y_train_without_missing = y_train_df["Y_true_unobserved"].copy()
 
         y_train_df["Y_observed"] = y_train_df["Y_true_unobserved"].copy().astype(int)
@@ -127,8 +123,7 @@ def run_experiment(
         ]
 
         mar2_schemes = [
-            {"name": f"MAR2", "type": "MAR2", "params": {"W": w, "b": b}}
-            for w, b in product(mar2_w, mar2_b)
+            {"name": f"MAR2", "type": "MAR2", "params": {"W": w, "b": b}} for w, b in product(mar2_w, mar2_b)
         ]
 
         mnar_schemes = [
@@ -195,20 +190,16 @@ def run_experiment(
             if scheme_type == "MCAR":
                 y_missing_df = MCAR(y_train_df, **config["params"])
             elif scheme_type == "MAR1":
-                y_missing_df = MAR1(
-                    pd.DataFrame(X_train), y_train_df, **config["params"]
-                )
+                y_missing_df = MAR1(pd.DataFrame(X_train), y_train_df, **config["params"])
                 w1 = config["params"].get("w")
                 b1 = config["params"].get("b")
             elif scheme_type == "MAR2":
-                y_missing_df = MAR2(
-                    pd.DataFrame(X_train), y_train_df, **config["params"]
-                )
+                y_missing_df = MAR2(pd.DataFrame(X_train), y_train_df, **config["params"])
+                w2 = config["params"].get("W")
                 b2 = config["params"].get("b")
             elif scheme_type == "MNAR":
-                y_missing_df = MNAR(
-                    pd.DataFrame(X_train), y_train_df, **config["params"]
-                )
+                y_missing_df = MNAR(pd.DataFrame(X_train), y_train_df, **config["params"])
+                wx = config["params"].get("w_x")
                 wy = config["params"].get("w_y")
                 by = config["params"].get("b")
 
@@ -220,9 +211,7 @@ def run_experiment(
             missing_pct = round((missing_count / total_count) * 100, 2)
 
             if verbose:
-                logger.info(
-                    f"Deleted {missing_pct}% y info ({missing_count}/{total_count})"
-                )
+                logger.info(f"Deleted {missing_pct}% y info ({missing_count}/{total_count})")
 
             # iteration over approaches
             for approach in approaches:
@@ -233,9 +222,7 @@ def run_experiment(
                 if approach == "self_training":
                     classifiers = [
                         SVC(C=1.0, kernel="rbf", probability=True),
-                        LogisticRegression(
-                            solver="lbfgs", l1_ratio=0, C=1.0, max_iter=100
-                        ),
+                        LogisticRegression(solver="lbfgs", l1_ratio=0, C=1.0, max_iter=100),
                         RandomForestClassifier(),
                         XGBClassifier(),
                     ]
@@ -248,14 +235,10 @@ def run_experiment(
                                 k_best=k,
                                 base_estimator=classifier,
                             )
-                            ulr_model.fit(
-                                X_train, y_train_obs, y_train_df["Y_true_unobserved"]
-                            )
+                            ulr_model.fit(X_train, y_train_obs, y_train_df["Y_true_unobserved"])
 
                             # valdiation
-                            ulr_model.validate(
-                                X_val, y_val, measure="balanced_accuracy"
-                            )
+                            ulr_model.validate(X_val, y_val, measure="balanced_accuracy")
 
                             # calculating performance on outer test data
                             y_pred = ulr_model.predict(X_test)
@@ -277,9 +260,7 @@ def run_experiment(
                                     "base_estimator": classifier.__class__.__name__,
                                     "Missing_Percent": missing_pct,
                                     "Accuracy": accuracy_score(y_test, y_pred),
-                                    "Balanced_Acc": balanced_accuracy_score(
-                                        y_test, y_pred
-                                    ),
+                                    "Balanced_Acc": balanced_accuracy_score(y_test, y_pred),
                                     "F1": f1_score(y_test, y_pred),
                                     "ROC_AUC": roc_auc_score(y_test, y_prob),
                                     "Imputation_score": ulr_model.imputation_scores,
@@ -358,9 +339,7 @@ def run_label_propagation_experiment(
 
         # Train (60%), Val (20%), Test (20%)
 
-        X_temp, X_test, y_temp, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=seed, stratify=y
-        )
+        X_temp, X_test, y_temp, y_test = train_test_split(X, y, test_size=0.2, random_state=seed, stratify=y)
 
         X_train, X_val, y_train, y_val = train_test_split(
             X_temp, y_temp, test_size=0.25, random_state=seed, stratify=y_temp
@@ -380,9 +359,7 @@ def run_label_propagation_experiment(
 
         X_train_df = pd.DataFrame(X_train).reset_index(drop=True)
 
-        y_train_df = pd.DataFrame(y_train, columns=["Y_true_unobserved"]).reset_index(
-            drop=True
-        )
+        y_train_df = pd.DataFrame(y_train, columns=["Y_true_unobserved"]).reset_index(drop=True)
         y_train_without_missing = y_train_df["Y_true_unobserved"].copy()
 
         y_train_df["Y_observed"] = y_train_df["Y_true_unobserved"].copy().astype(int)
@@ -402,8 +379,7 @@ def run_label_propagation_experiment(
         ]
 
         mar2_schemes = [
-            {"name": f"MAR2", "type": "MAR2", "params": {"W": w, "b": b}}
-            for w, b in product(mar2_w, mar2_b)
+            {"name": f"MAR2", "type": "MAR2", "params": {"W": w, "b": b}} for w, b in product(mar2_w, mar2_b)
         ]
 
         mnar_schemes = [
@@ -430,20 +406,14 @@ def run_label_propagation_experiment(
             if scheme_type == "MCAR":
                 y_missing_df = MCAR(y_train_df, **config["params"])
             elif scheme_type == "MAR1":
-                y_missing_df = MAR1(
-                    pd.DataFrame(X_train), y_train_df, **config["params"]
-                )
+                y_missing_df = MAR1(pd.DataFrame(X_train), y_train_df, **config["params"])
                 w1 = config["params"].get("w")
                 b1 = config["params"].get("b")
             elif scheme_type == "MAR2":
-                y_missing_df = MAR2(
-                    pd.DataFrame(X_train), y_train_df, **config["params"]
-                )
+                y_missing_df = MAR2(pd.DataFrame(X_train), y_train_df, **config["params"])
                 b2 = config["params"].get("b")
             elif scheme_type == "MNAR":
-                y_missing_df = MNAR(
-                    pd.DataFrame(X_train), y_train_df, **config["params"]
-                )
+                y_missing_df = MNAR(pd.DataFrame(X_train), y_train_df, **config["params"])
                 wy = config["params"].get("w_y")
                 by = config["params"].get("b")
 
@@ -453,9 +423,7 @@ def run_label_propagation_experiment(
             missing_pct = round((missing_count / total_count) * 100, 2)
 
             for sigma in sigma_vals:
-                ulr_model = UnlabeledLogReg(
-                    y_imputation_method="label_propagation", sigma=sigma
-                )
+                ulr_model = UnlabeledLogReg(y_imputation_method="label_propagation", sigma=sigma)
                 ulr_model.fit(X_train, y_train_obs, y_train_df["Y_true_unobserved"])
 
                 # valdiation
