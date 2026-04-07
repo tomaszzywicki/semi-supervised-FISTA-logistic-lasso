@@ -1,3 +1,4 @@
+import ast
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
@@ -179,3 +180,73 @@ def generate_summary_table(df: pd.DataFrame) -> pd.DataFrame:
     return summary_df.reset_index()
 
 
+def plot_sigma_results(results_df):
+    n_seeds = results_df["Seed"].nunique()
+
+    df_lp = results_df[results_df["Approach"] == "label_propagation"].copy()
+
+    if isinstance(df_lp["Imputation_score"].iloc[0], str):
+        df_lp["Imputation_score"] = df_lp["Imputation_score"].apply(ast.literal_eval)
+
+    df_lp["Final_imputation_score"] = df_lp["Imputation_score"].apply(
+        lambda x: x[-1] if len(x) > 0 else np.nan
+    )
+
+    schemes = [s for s in df_lp["Scheme"].unique() if s != "None"]
+    sigmas = sorted(df_lp["sigma"].unique())
+    metrics = ["Balanced_Acc", "ROC_AUC", "Final_imputation_score"]
+    metric_labels = [
+        "Balanced Accuracy (test)",
+        "ROC AUC (test)",
+        "Imputation score (final)",
+    ]
+
+    fig, axes = plt.subplots(
+        len(metrics),
+        len(schemes),
+        figsize=(4 * len(schemes), 4 * len(metrics)),
+        sharey="row",
+    )
+
+    for col_idx, scheme in enumerate(schemes):
+        df_scheme = df_lp[df_lp["Scheme"] == scheme]
+
+        for row_idx, (metric, metric_label) in enumerate(zip(metrics, metric_labels)):
+            ax = axes[row_idx, col_idx]
+
+            means, stds = [], []
+            for sigma in sigmas:
+                vals = df_scheme[df_scheme["sigma"] == sigma][metric].dropna()
+                means.append(vals.mean())
+                stds.append(vals.std())
+
+            means = np.array(means)
+            stds = np.array(stds)
+
+            ax.plot(sigmas, means, marker="o", linewidth=2, color="#378ADD", zorder=3)
+            ax.fill_between(
+                sigmas, means - stds, means + stds, alpha=0.2, color="#378ADD"
+            )
+
+            for sigma in sigmas:
+                vals = df_scheme[df_scheme["sigma"] == sigma][metric].dropna().values
+                ax.scatter(
+                    [sigma] * len(vals), vals, color="gray", alpha=0.4, s=20, zorder=2
+                )
+
+            if row_idx == 0:
+                ax.set_title(scheme, fontsize=11)
+            if col_idx == 0:
+                ax.set_ylabel(metric_label, fontsize=10)
+
+            ax.set_xlabel("$\sigma$")
+            ax.set_xscale("log")
+            ax.grid(alpha=0.3)
+
+    fig.suptitle(
+        f"Label propagation results for different $\sigma$ values \n(averaged over {n_seeds} seeds += 1SE)",
+        fontsize=13,
+    )
+    plt.tight_layout()
+    plt.savefig("sigma_analysis.png", dpi=150, bbox_inches="tight")
+    plt.show()
