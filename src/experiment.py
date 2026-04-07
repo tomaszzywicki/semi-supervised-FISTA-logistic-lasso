@@ -96,9 +96,9 @@ def run_experiment(
         X_val = pipeline.transform(X_val)
         X_test = pipeline.transform(X_test)
 
-        X_train_df = pd.DataFrame(X_train)
+        X_train_df = pd.DataFrame(X_train).reset_index(drop=True)
 
-        y_train_df = pd.DataFrame(y_train, columns=["Y_true_unobserved"])
+        y_train_df = pd.DataFrame(y_train, columns=["Y_true_unobserved"]).reset_index(drop=True)
         y_train_without_missing = y_train_df["Y_true_unobserved"].copy()
 
         y_train_df["Y_observed"] = y_train_df["Y_true_unobserved"].copy().astype(int)
@@ -169,8 +169,11 @@ def run_experiment(
             }
         )
 
+        y_train_df_clean = y_train_df.copy()
+
         # iteration over missing mechanisms
         for config in schemes_config:
+            y_train_df = y_train_df_clean.copy()
             scheme_name = config["name"]
             scheme_type = config["type"]
 
@@ -212,7 +215,7 @@ def run_experiment(
                 if approach == "self_training":
                     classifiers = [
                         SVC(C=1.0, kernel="rbf", probability=True),
-                        LogisticRegression(l1_ratio=0, C=10.0, max_iter=10_000),
+                        LogisticRegression(solver="lbfgs", l1_ratio=0, C=1.0, max_iter=100),
                         RandomForestClassifier(),
                         XGBClassifier(),
                     ]
@@ -276,7 +279,9 @@ def run_experiment(
                         "Approach": approach,
                         "w1": w1,
                         "b1": b1,
+                        "w2": w2,
                         "b2": b2,
+                        "wx": wx,
                         "wy": wy,
                         "by": by,
                         "k_best": np.nan,

@@ -39,7 +39,7 @@ def MCAR(y: pd.DataFrame, p: float = 0.2) -> pd.DataFrame:
 
     y_missing = y.copy()
 
-    mask = np.random.binomial(n=1, p=p, size=len(y)).astype(bool)
+    mask = np.random.binomial(n=1, p=p, size=len(y_missing)).astype(bool)
 
     return _add_missing_indicators(y_missing, mask)
 
@@ -126,8 +126,8 @@ def MAR2(
 
     if W is None:
         W = np.random.randn(X.shape[1])
-    if type(W) == float:
-        W = np.ones(X.shape[1]) * float
+    if isinstance(W, (int, float)):
+        W = np.ones(X.shape[1]) * W
 
     z = np.dot(X_scaled, W) + b
     p_missing = expit(z)
@@ -177,7 +177,7 @@ def MNAR(
 
     if w_x is None:
         w_x = np.random.randn(X.shape[1])
-    elif type(w_x) == float:
+    elif isinstance(w_x, (int, float)):
         w_x = np.ones(X.shape[1]) * w_x
 
     z = np.dot(X_scaled, w_x) + (w_y * y_scaled) + b
