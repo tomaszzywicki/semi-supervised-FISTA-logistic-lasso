@@ -164,7 +164,7 @@ def generate_summary_table(df: pd.DataFrame) -> pd.DataFrame:
     return summary_df.reset_index()
 
 
-def plot_sigma_results(results_df):
+def plot_sigma_results(results_df, dataset_name):
     n_seeds = results_df["Seed"].nunique()
 
     df_lp = results_df[results_df["Approach"] == "label_propagation"].copy()
@@ -196,7 +196,7 @@ def plot_sigma_results(results_df):
         df_scheme = df_lp[df_lp["Scheme"] == scheme]
 
         for row_idx, (metric, metric_label) in enumerate(zip(metrics, metric_labels)):
-            ax = axes[row_idx, col_idx]
+            ax = axes[row_idx, col_idx] if len(schemes) > 1 else axes[row_idx]
 
             means, stds = [], []
             for sigma in sigmas:
@@ -212,21 +212,27 @@ def plot_sigma_results(results_df):
 
             for sigma in sigmas:
                 vals = df_scheme[df_scheme["sigma"] == sigma][metric].dropna().values
-                ax.scatter([sigma] * len(vals), vals, color="gray", alpha=0.4, s=20, zorder=2)
-
+                ax.scatter([sigma] * len(vals), vals, color="gray", alpha=0.4, s=30, zorder=2)
+            
             if row_idx == 0:
-                ax.set_title(scheme, fontsize=11)
+                ax.set_title(scheme, fontsize=16, pad=10)
+                
             if col_idx == 0:
-                ax.set_ylabel(metric_label, fontsize=10)
+                ax.set_ylabel(metric_label, fontsize=14)
 
-            ax.set_xlabel("$\sigma$")
+            ax.set_xlabel(r"$\sigma$", fontsize=15)
+            
+            ax.tick_params(axis='both', which='major', labelsize=16)
+
             ax.set_xscale("log")
             ax.grid(alpha=0.3)
 
     fig.suptitle(
-        f"Label propagation results for different $\sigma$ values \n(averaged over {n_seeds} seeds += 1SE)",
-        fontsize=13,
+        f"Label propagation results for different $\sigma$ values (Dataset: {dataset_name}) \n(averaged over {n_seeds} seeds $\pm$ 1SD)",
+        fontsize=20,
+        y=1.02
     )
+    
     plt.tight_layout()
-    plt.savefig("sigma_analysis.png", dpi=150, bbox_inches="tight")
+    plt.savefig("sigma_analysis.png", dpi=300, bbox_inches="tight")
     plt.show()
