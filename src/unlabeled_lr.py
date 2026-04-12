@@ -48,7 +48,7 @@ class UnlabeledLogReg:
             k_best (int): Number of biggest probabilties to be selected in self_training method.
                 Defaults to 1.
             sigma (float): Sigma paramater for the distance function in label_propagation method.
-                Deafults to 1.0.
+                Deafults to 10.
         """
         self.y_imputation_method = y_imputation_method
         self.model = LogisticLassoFistaCV()
